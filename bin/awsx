@@ -1,0 +1,143 @@
+#!/usr/bin/env perl
+
+# vim: tabstop=4 expandtab
+
+###### PACKAGES ######
+
+use Modern::Perl;
+use Data::Printer alias => 'pdump';
+use Getopt::Long;
+Getopt::Long::Configure('no_ignore_case');
+Getopt::Long::Configure('pass_through');
+Getopt::Long::Configure('no_auto_abbrev');
+use Util::Medley::Simple::Spawn;
+use JSON;
+
+###### CONSTANTS ######
+
+use constant IGNORE_PROFILES => ('default');
+
+use constant IGNORE_PROFILES_RE => (qr/assume-role/);
+
+###### GLOBALS ######
+
+use vars qw(
+  $Logger
+  $Json
+  $MergeOutput
+  @MergedOutput
+  %ExcludeProfiles
+);
+
+###### MAIN ######
+
+$Json = JSON->new;
+
+parse_cmd_line();
+
+my $cmd = "aws configure list-profiles";
+my @in  = `$cmd`;
+die if $?;
+
+foreach my $profile (@in) {
+    chomp $profile;
+    next if ignore_profile($profile);
+    next if $ExcludeProfiles{$profile};
+
+    #next if $profile eq 'default';
+    #next if $profile eq 'stuzo';
+    #next if $profile =~ /assume-role/;
+
+    #if ($ENV{AWSX_SELECT_RE}) {
+    #    if ($profile !~ /$ENV{AWSX_SELECT_RE}/) {
+    #        next;
+    #    }
+    #}
+
+    #say "[$profile]";
+    #    $ENV{AWS_PROFILE} = $profile;
+    my $cmd = "aws --profile $profile @ARGV";
+    print STDERR "$cmd\n";
+    my ( $stdout, $stderr, $exit ) = Util::Medley::Simple::Spawn::capture($cmd);
+    if ($exit) {
+        print STDERR $stderr;
+        exit $exit;
+    }
+
+    my $href = $Json->decode($stdout);
+    $href->{ProfileName} = $profile;
+
+    if ($MergeOutput) {
+        push @MergedOutput, $href;
+    }
+    else {
+        print $Json->pretty->encode($href);
+    }
+}
+
+if ($MergeOutput) {
+    print $Json->pretty->encode( \@MergedOutput );
+}
+
+###### END MAIN ######
+
+sub ignore_profile {
+    my $profile = shift;
+
+    foreach my $ignore ( IGNORE_PROFILES() ) {
+        if ( $profile eq $ignore ) {
+            return 1;
+        }
+    }
+
+    foreach my $ignore_re ( IGNORE_PROFILES_RE() ) {
+        if ( $profile =~ $ignore_re ) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+sub check_required {
+    my $opt = shift;
+    my $arg = shift;
+
+    print_usage("missing arg $opt") if !$arg;
+}
+
+sub parse_cmd_line {
+    my $help;
+    my $excludeProfiles;
+
+    GetOptions(
+        "e=s"          => \$excludeProfiles,
+        "merge-output" => \$MergeOutput,
+        "help|?"       => \$help
+    );
+
+    print_usage("usage:") if $help;
+
+    if ($excludeProfiles) {
+        foreach my $profile ( split /,/, $excludeProfiles ) {
+            $ExcludeProfiles{$profile} = 1;
+        }
+    }
+
+    #    check_required( '-e', $Example );
+}
+
+sub print_usage {
+    print STDERR "@_\n";
+
+    print <<"HERE";
+
+$0    
+    [-e <exclude profiles>]
+    [--merge-output]
+    [-?] (usage)
+     
+HERE
+
+    exit 1;
+}

@@ -74,17 +74,6 @@ method awsX ( Str 			 :$subcommand!,
 	return $aref;
 }
 
-method getTag (ArrayRef :$tags!,
-			   Str      :$key!) {
-
-	foreach my $tag (@$tags) {
-
-		if ( $tag->{Key} =~ /^$key$/i ) {
-			return $tag->{Value};
-		}
-	}
-}
-
 ##############################################################################
 # PRIVATE METHODS
 ##############################################################################

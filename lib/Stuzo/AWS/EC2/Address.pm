@@ -109,7 +109,7 @@ has profileName => (
 
 method getName {
 	
-	my $name = $self->getTag(key => 'Name');
+	my $name = $self->getTagValue('Name');
 	if (!$name) {
 		return $self->allocationId;	
 	}	
@@ -119,7 +119,15 @@ method getName {
 	return $name;
 }
 
-method getTag (Str :$key!) {
+method getTagValue (Str $key!) {
+    
+    return $self->SUPER::getTagValue(
+        tags => $self->tags,
+        key  => $key   
+    );	
+}
+
+method getTag (Str $key!) {
 
 	return $self->SUPER::getTag(
 		tags => $self->tags,

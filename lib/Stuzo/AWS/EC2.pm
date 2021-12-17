@@ -143,7 +143,7 @@ method awsXDescribeAddresses (Regexp    	 :$matchTagName,
 	my @final;
 	foreach my $address (@addresses) {
 
-		my $name = $address->getTag( key => 'Name' );
+		my $name = $address->getName;
 		if ($name) {
 
 			my $skip = 0;

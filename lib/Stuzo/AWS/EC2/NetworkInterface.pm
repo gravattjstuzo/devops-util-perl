@@ -136,7 +136,15 @@ has vpcId => (
 # PUBLIC METHODS
 ##############################################################################
 
-method getTag (Str :$key!) {
+method getTagValue (Str $key!) {
+    
+    return $self->SUPER::getTagValue(
+        tags => $self->tagSet,
+        key  => $key   
+    );  
+}
+
+method getTag (Str $key!) {
 
 	return $self->SUPER::getTag(
 		tags => $self->tagSet,

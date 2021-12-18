@@ -1,4 +1,4 @@
-package Stuzo::AWS::ELBv2;
+package Stuzo::AWS::Route53::ResourceRecordSet;
 
 use Modern::Perl;
 use Moose;
@@ -6,14 +6,10 @@ use namespace::autoclean;
 use Kavorka 'method';
 use Data::Printer alias => 'pdump';
 use Devel::Confess;
-use Stuzo::AWS::ELBv2::LoadBalancer;
 
 extends 'Stuzo::AWS';
 
-with
-  'Util::Medley::Roles::Attributes::Logger',
-  'Util::Medley::Roles::Attributes::Spawn',
-  'Util::Medley::Roles::Attributes::String';
+with 'Util::Medley::Roles::Attributes::Logger';
 
 ##############################################################################
 # CONSTANTS
@@ -23,6 +19,24 @@ with
 # PUBLIC ATTRIBUTES
 ##############################################################################
 
+has aliasTarget             => ( is => 'ro', isa => 'HashRef' );
+has failover                => ( is => 'ro', isa => 'Str' );
+has geoLocation             => ( is => 'ro', isa => 'HashRef' );
+has healthCheckId           => ( is => 'ro', isa => 'Str' );
+has multiValueAnswer        => ( is => 'ro', isa => 'Bool' );
+has name                    => ( is => 'ro', isa => 'Str', required => 1 );
+has region                  => ( is => 'ro', isa => 'Str' );
+has resourceRecords         => ( is => 'ro', isa => 'ArrayRef' );
+has setIdentifier           => ( is => 'ro', isa => 'Str' );
+has trafficPolicyInstanceId => ( is => 'ro', isa => 'Str' );
+has ttl                     => ( is => 'ro', isa => 'Int' );
+has type                    => ( is => 'ro', isa => 'Str', required => 1 );
+has weight                  => ( is => 'ro', isa => 'Int' );
+has profileName => (
+    is => 'ro',
+    isa => 'Str',
+);
+
 ##############################################################################
 # PRIVATE_ATTRIBUTES
 ##############################################################################
@@ -31,50 +45,23 @@ with
 # CONSTRUCTOR
 ##############################################################################
 
+method BUILD {
+
+    if (!$self->type) {
+        pdump $self;
+        die;	
+    }	
+}
+
 ##############################################################################
 # PUBLIC METHODS
 ##############################################################################
 
-method awsXDescribeLoadBalancers (Str            :$type,
-								  ArrayRef|Undef :$excludeProfiles,
-                                  Str|Undef      :$excludeProfilesRe,
-                                  Str|Undef      :$includeProfilesRe,) {
-
-	my $aref = $self->awsX(
-		subcommand        => 'elbv2 describe-load-balancers',
-		excludeProfiles   => $excludeProfiles,
-		excludeProfilesRe => $excludeProfilesRe,
-		includeProfilesRe => $includeProfilesRe,
-	);
-
-	my @elbs;
-
-	foreach my $href (@$aref) {
-		my $profileName = $href->{ProfileName};
-		
-		foreach my $elbHref ( @{ $href->{LoadBalancers} } ) {
-			my $camelizedHref = $self->__camelize($elbHref);
-			my $loadBalancer =
-			  Stuzo::AWS::ELBv2::LoadBalancer->new(%$camelizedHref, profileName => $profileName);
-
-			if ($type) {
-				if ( $loadBalancer->type eq $type ) {
-					push @elbs, $loadBalancer;
-				}
-			}
-			else {
-				push @elbs, $loadBalancer;
-			}
-		}
-	}
-	
-	return \@elbs;
-}
-
 ##############################################################################
-# PRIVATE METHODS
+# PRIVATE_METHODS
 ##############################################################################
 
 __PACKAGE__->meta->make_immutable;
 
 1;
+

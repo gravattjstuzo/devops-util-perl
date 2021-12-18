@@ -27,6 +27,8 @@ use vars qw(
   $MergeOutput
   @MergedOutput
   %ExcludeProfiles
+  $ExcludeProfilesRe
+  $IncludeProfilesRe
 );
 
 ###### MAIN ######
@@ -41,21 +43,22 @@ die if $?;
 
 foreach my $profile (@in) {
     chomp $profile;
+
+    if ($IncludeProfilesRe) {
+        if ($profile !~ /$IncludeProfilesRe/) {
+            next;
+        }
+    }
+   
+    if ($ExcludeProfilesRe) {
+        if ($profile =~ /$ExcludeProfilesRe/) {
+            next;
+        }
+    }
+
     next if ignore_profile($profile);
     next if $ExcludeProfiles{$profile};
 
-    #next if $profile eq 'default';
-    #next if $profile eq 'stuzo';
-    #next if $profile =~ /assume-role/;
-
-    #if ($ENV{AWSX_SELECT_RE}) {
-    #    if ($profile !~ /$ENV{AWSX_SELECT_RE}/) {
-    #        next;
-    #    }
-    #}
-
-    #say "[$profile]";
-    #    $ENV{AWS_PROFILE} = $profile;
     my $cmd = "aws --profile $profile @ARGV";
     print STDERR "$cmd\n";
     my ( $stdout, $stderr, $exit ) = Util::Medley::Simple::Spawn::capture($cmd);
@@ -112,6 +115,8 @@ sub parse_cmd_line {
 
     GetOptions(
         "e=s"          => \$excludeProfiles,
+        "E=s" => \$ExcludeProfilesRe,
+        "I=s" => \$IncludeProfilesRe,
         "merge-output" => \$MergeOutput,
         "help|?"       => \$help
     );
@@ -134,7 +139,10 @@ sub print_usage {
 
 $0    
     [-e <exclude profiles>]
+    [-E <exclude profiles regex>]
+    [-I <include profiles regex>]
     [--merge-output]
+
     [-?] (usage)
      
 HERE

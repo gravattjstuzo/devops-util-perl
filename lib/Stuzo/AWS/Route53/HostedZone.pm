@@ -1,4 +1,4 @@
-package Stuzo::AWS::ELBv2::LoadBalancer;
+package Stuzo::AWS::Route53::HostedZone;
 
 use Modern::Perl;
 use Moose;
@@ -19,24 +19,12 @@ with 'Util::Medley::Roles::Attributes::Logger';
 # PUBLIC ATTRIBUTES
 ##############################################################################
 
-has availabilityZones     => ( is => 'ro', isa => 'ArrayRef' );
-has canonicalHostedZoneId => ( is => 'ro', isa => 'Str' );
-has createdTime           => ( is => 'ro', isa => 'Str' );
-has customerOwnedIpv4Pool => ( is => 'ro', isa => 'Str' );
-has dnsName               => ( is => 'ro', isa => 'Str' );
-has ipAddressType         => ( is => 'ro', isa => 'Str' );
-has loadBalancerArn       => ( is => 'ro', isa => 'Str' );
-has loadBalancerName      => ( is => 'ro', isa => 'Str' );
-has scheme                => ( is => 'ro', isa => 'Str' );
-has securityGroups        => ( is => 'ro', isa => 'ArrayRef[Str|Undef]' );
-has 'state'               => ( is => 'ro', isa => 'HashRef' );
-has type                  => ( is => 'ro', isa => 'Str' );
-has vpcId                 => ( is => 'ro', isa => 'Str' );
-has profileName => (
-    is => 'ro',
-    isa => 'Str',
-);
-
+has callerReference        => ( is => 'ro', isa => 'Str', required => 1 );
+has config                 => ( is => 'ro', isa => 'HashRef' );
+has id                     => ( is => 'ro', isa => 'Str', required => 1 );
+has linkedService          => ( is => 'ro', isa => 'HashRef' );
+has name                   => ( is => 'ro', isa => 'Str', required => 1 );
+has resourceRecordSetCount => ( is => 'ro', isa => 'Int' );
 
 ##############################################################################
 # PRIVATE_ATTRIBUTES
@@ -50,16 +38,6 @@ has profileName => (
 # PUBLIC METHODS
 ##############################################################################
 
-method getPublicAddresses {
-
-    #
-    # DO NOT USE
-    #
-    # application load balancers have ephemeral ips, therefore
-    # no addresses are in availabilityZones. use a dns-lookup instead
-    # if you really need the addresses.
-    #
-}
 
 ##############################################################################
 # PRIVATE_METHODS

@@ -34,8 +34,8 @@ with
 # PUBLIC METHODS
 ##############################################################################
 
-method aws (Str :$subcommand!,
-			Str :$profile) {
+method aws (Str       :$subcommand!,
+			Str|Undef :$profile) {
 
 	my @cmd = ('aws');
 	push @cmd, '--profile', $profile if $profile;
@@ -72,6 +72,47 @@ method awsX ( Str 			 :$subcommand!,
 	my $aref = decode_json($stdout);
 
 	return $aref;
+}
+
+method listProfiles (ArrayRef|Undef :$excludeProfiles,
+                     Str|Undef      :$excludeProfilesRe,
+                     Str|Undef      :$includeProfilesRe ) { 
+
+    my %exclude;
+    if ($excludeProfiles) {
+        foreach my $profile (@$excludeProfiles) {
+            $exclude{$profile} = 1;	
+        }	
+    }	
+    
+	my @cmd = ('aws', 'configure', 'list-profiles');
+    my ( $stdout, $stderr, $exit ) = $self->Spawn->capture("@cmd");
+    if ($exit) {
+        confess $stderr;
+    }
+    
+    my @profiles;
+    foreach my $profile (split(/\n/, $stdout)) {
+    	
+    	next if $profile eq 'default';
+        next if $exclude{$profile};
+        
+        if ($includeProfilesRe) {
+        	if ($profile !~ /$includeProfilesRe/) {
+        	   next;
+        	}
+        }
+        		
+        if ($excludeProfilesRe) {
+            if ($profile =~ /$excludeProfilesRe/) {
+                next;	
+            }     	
+        } 
+        
+        push @profiles, $profile;
+    }
+    
+    return \@profiles;
 }
 
 ##############################################################################

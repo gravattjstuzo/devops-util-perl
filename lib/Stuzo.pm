@@ -98,8 +98,11 @@ method __camelize (Any $data!) {
 	}
 	elsif ( ref($data) eq '' ) {
 		if ( defined $data ) {
-			if ( $data =~ /dnsname/i ) {
+			if ( $data =~ /DNSName/i ) {
 				$new = 'dnsName';    # want dnsName not dNSName
+			}
+			elsif ($data =~ /TTL/i) {
+			     $new = 'ttl';	
 			}
 			else {
 				$new = $self->String->camelize($data);

@@ -35,7 +35,8 @@ with
 
 method getHostObj (Str      :$hostName!,
 				   Str      :$address!,
-				   Str|Undef      :$checkCommand,
+				   Str|Undef :$checkCommand,
+				   ArrayRef :$parents,
 				   Int      :$checkInterval = 5,
 				   Int      :$retryInterval = 1,
 				   Int      :$maxCheckAttempts = 3,
@@ -59,6 +60,7 @@ method getHostObj (Str      :$hostName!,
 	push @directives, [ 'notification_period',   $notifyPeriod ];
 	push @directives, [ 'notification_options',  join( ',', @$notifyOptions ) ];
 	push @directives, [ 'check_command', $checkCommand ] if $checkCommand;
+	push @directives, [ 'parents', join(',', @$parents) ] if $parents;
 
 	my $maxLen = $self->_nagGetDirectiveMaxLength( directives => \@directives );
 	my @lines  = ("define host {");

@@ -10,6 +10,8 @@ use Getopt::Long;
 Getopt::Long::Configure('no_ignore_case');
 use Stuzo::AWS::EC2;
 use Stuzo::AWS::ELBv2;
+use Stuzo::AWS::Route53;
+use Stuzo::AWS;
 use Stuzo::Nagios;
 use Util::Medley::Hostname;
 
@@ -24,10 +26,12 @@ use vars qw(
   $EC2
   $ELBv2
   $Nagios
+  $AWS
   $UtilHostname
   %HostGroups
   $IncludeProfilesRe
   $ExcludeProfilesRe
+  %Aliases
 );
 
 ###### MAIN ######
@@ -45,6 +49,7 @@ use vars qw(
 
 parseCmdLine();
 
+$AWS          = Stuzo::AWS->new;
 $EC2          = Stuzo::AWS::EC2->new;
 $ELBv2        = Stuzo::AWS::ELBv2->new;
 $Nagios       = Stuzo::Nagios->new;
@@ -110,10 +115,14 @@ sub buildChecksForALBs {
 		print $Nagios->getHostGroupObj( name => 'ALB', members => \@names )
 		  . "\n\n";
 
+        my @aliases = @{ $HostGroups{'ALB-ALIAS'} }; 
+        print $Nagios->getHostGroupObj( name => 'ALB-ALIAS', members => \@aliases )
+          . "\n\n";
+        
 		print $Nagios->getServiceObj(
 			desc          => 'cert check [port 443]',
 			checkCommand  => 'check_ssl_cert!443!14!7',
-			hostGroupName => 'ALB'
+			hostGroupName => 'ALB-ALIAS'
 		);
 	}
 }
@@ -146,6 +155,9 @@ sub findNetworkInterface {
 	return $interfacesHref->{$networkInterfaceId};
 }
 
+#
+# TODO: attempt to find 'A' (aws alias) record in route53 instead of ugly name
+#
 sub buildHostsForALBs {
 	#
 	# build hosts (find public ALBs)
@@ -159,15 +171,11 @@ sub buildHostsForALBs {
 
 	foreach my $elb (@$elbsAref) {
 
+        next if $elb->dnsName =~ /argo/;
+        
 		if (    $elb->scheme eq 'internet-facing'
 			and $elb->state->{code} eq 'active' )
 		{
-
-			if ( !$elb->dnsName ) {
-				pdump $elb;
-				die;    # shouldn't get here
-			}
-
 			my $fqdn = $elb->dnsName;
 			my ( $hostname, $domain ) = $UtilHostname->parseHostname($fqdn);
 
@@ -180,8 +188,40 @@ sub buildHostsForALBs {
 			);
 
 			print "$hostObj\n\n";
+
+			my $route53 = getRoute53( $elb->profileName );
+			my $aliasesAref =
+			  $route53->reverseSearchDnsAliases( dnsName => $elb->dnsName );
+            
+			foreach my $alias (@$aliasesAref) {
+				
+				push @{ $HostGroups{'ALB-ALIAS'} }, $alias;
+				
+				my $hostObj = $Nagios->getHostObj(
+					hostName     => $alias,
+					address      => $alias,  # ips are dynamic for app balancers
+					parents      => [$hostname],
+					checkCommand => "check_tcp!443",
+				);
+
+				print "$hostObj\n\n";
+				
+				push @{ $Aliases{$hostname} }, $alias;
+			}
 		}
 	}
+}
+
+sub getRoute53 {
+	my $profile = shift;
+
+	state %route53;
+
+	if ( !$route53{$profile} ) {
+		$route53{$profile} = Stuzo::AWS::Route53->new( profile => $profile );
+	}
+
+	return $route53{$profile};
 }
 
 sub buildHostsForEips {

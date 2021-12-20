@@ -25,6 +25,10 @@ has id                     => ( is => 'ro', isa => 'Str', required => 1 );
 has linkedService          => ( is => 'ro', isa => 'HashRef' );
 has name                   => ( is => 'ro', isa => 'Str', required => 1 );
 has resourceRecordSetCount => ( is => 'ro', isa => 'Int' );
+has profileName => (
+    is => 'ro',
+    isa => 'Str',
+);
 
 ##############################################################################
 # PRIVATE_ATTRIBUTES

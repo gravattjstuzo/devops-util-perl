@@ -60,9 +60,10 @@ method awsX ( Str 			 :$subcommand!,
 
 	my @cmd = ( 'awsx', $subcommand, '--merge-output' );
 
-	push @cmd, '-e', join( ',', @$excludeProfiles ) if $excludeProfiles;
-	push @cmd, '-E', $excludeProfilesRe             if $excludeProfilesRe;
-	push @cmd, '-I', $includeProfilesRe             if $includeProfilesRe;
+	push @cmd, '-e', join( ',', @$excludeProfiles )
+	  if $excludeProfiles and @$excludeProfiles;
+	push @cmd, '-E', $excludeProfilesRe if $excludeProfilesRe;
+	push @cmd, '-I', $includeProfilesRe if $includeProfilesRe;
 
 	my ( $stdout, $stderr, $exit ) = $self->Spawn->capture("@cmd");
 	if ($exit) {
@@ -76,43 +77,43 @@ method awsX ( Str 			 :$subcommand!,
 
 method listProfiles (ArrayRef|Undef :$excludeProfiles,
                      Str|Undef      :$excludeProfilesRe,
-                     Str|Undef      :$includeProfilesRe ) { 
+                     Str|Undef      :$includeProfilesRe ) {
 
-    my %exclude;
-    if ($excludeProfiles) {
-        foreach my $profile (@$excludeProfiles) {
-            $exclude{$profile} = 1;	
-        }	
-    }	
-    
-	my @cmd = ('aws', 'configure', 'list-profiles');
-    my ( $stdout, $stderr, $exit ) = $self->Spawn->capture("@cmd");
-    if ($exit) {
-        confess $stderr;
-    }
-    
-    my @profiles;
-    foreach my $profile (split(/\n/, $stdout)) {
-    	
-    	next if $profile eq 'default';
-        next if $exclude{$profile};
-        
-        if ($includeProfilesRe) {
-        	if ($profile !~ /$includeProfilesRe/) {
-        	   next;
-        	}
-        }
-        		
-        if ($excludeProfilesRe) {
-            if ($profile =~ /$excludeProfilesRe/) {
-                next;	
-            }     	
-        } 
-        
-        push @profiles, $profile;
-    }
-    
-    return \@profiles;
+	my %exclude;
+	if ($excludeProfiles) {
+		foreach my $profile (@$excludeProfiles) {
+			$exclude{$profile} = 1;
+		}
+	}
+
+	my @cmd = ( 'aws', 'configure', 'list-profiles' );
+	my ( $stdout, $stderr, $exit ) = $self->Spawn->capture("@cmd");
+	if ($exit) {
+		confess $stderr;
+	}
+
+	my @profiles;
+	foreach my $profile ( split( /\n/, $stdout ) ) {
+
+		next if $profile eq 'default';
+		next if $exclude{$profile};
+
+		if ($includeProfilesRe) {
+			if ( $profile !~ /$includeProfilesRe/ ) {
+				next;
+			}
+		}
+
+		if ($excludeProfilesRe) {
+			if ( $profile =~ /$excludeProfilesRe/ ) {
+				next;
+			}
+		}
+
+		push @profiles, $profile;
+	}
+
+	return \@profiles;
 }
 
 ##############################################################################

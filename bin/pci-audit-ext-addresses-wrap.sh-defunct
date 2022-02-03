@@ -1,0 +1,3 @@
+#!/bin/bash
+
+pci-audit-ext-addresses.pl -E internal,dev,logs,automation,musa,gilbarco,stage,root -s dev,stage,staging

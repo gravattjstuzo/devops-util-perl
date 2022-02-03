@@ -11,6 +11,7 @@ Getopt::Long::Configure('no_ignore_case');
 use Stuzo::AWS::EC2;
 use Stuzo::AWS::ELBv2;
 use Stuzo::AWS::Route53;
+use Util::Medley::Simple::List ('uniq');
 
 ###### CONSTANTS ######
 
@@ -25,6 +26,9 @@ use vars qw(
   $UtilHostname
   $IncludeProfilesRe
   $ExcludeProfilesRe
+  %IgnoreTagsLike
+  @SkipEnvironments
+  %IpMap
 );
 
 ###### MAIN ######
@@ -45,6 +49,9 @@ parseCmdLine();
 $EC2   = Stuzo::AWS::EC2->new;
 $ELBv2 = Stuzo::AWS::ELBv2->new;
 
+temp();
+die;
+
 my @names;
 push @names, getEIPHostnames();
 push @names, getALBHostnames();
@@ -52,6 +59,8 @@ push @names, getALBHostnames();
 foreach my $name ( sort @names ) {
 	say $name;
 }
+
+pdump %IpMap;
 
 ###### END MAIN ######
 
@@ -73,8 +82,13 @@ sub findNetworkInterface {
 	if ( !$interfacesHref ) {
 		my %interfaces;
 		foreach my $interface (@$interfacesAref) {
-			my $id = $interface->networkInterfaceId;
-			$interfaces{$id} = $interface;
+			my $id  = $interface->networkInterfaceId;
+			my $env = $interface->getTagValue('Environment');
+			if ( skipEnv($env) ) {
+			}
+			else {
+				$interfaces{$id} = $interface;
+			}
 		}
 
 		$interfacesHref = \%interfaces;
@@ -83,7 +97,21 @@ sub findNetworkInterface {
 	return $interfacesHref->{$networkInterfaceId};
 }
 
-sub getALBHostnames {
+sub skipEnv {
+	my $env = shift;
+
+	if ( defined $env ) {
+		foreach my $skipEnv (@SkipEnvironments) {
+			if ( $env eq $skipEnv ) {
+				return 1;
+			}
+		}
+	}
+
+	return 0;
+}
+
+sub temp {
 	#
 	# build hosts (find public ALBs)
 	#
@@ -97,27 +125,34 @@ sub getALBHostnames {
 	my @names;
 	foreach my $elb (@$elbsAref) {
 
+		my @names;
+		my @ips;
+
 		if (    $elb->scheme eq 'internet-facing'
 			and $elb->state->{code} eq 'active' )
 		{
 			my $fqdn = $elb->dnsName;
 			next if $fqdn =~ /argo/;
 
-			my $route53 = getRoute53( $elb->profileName );
-			my $aliasesAref =
-			  $route53->reverseSearchDnsAliases( dnsName => $elb->dnsName );
-
-			if (@$aliasesAref) {
-				foreach my $alias (@$aliasesAref) {
-
-					# use the first one found
-					push @names, $alias;
-				}
+			if ( skipEnv( $elb->getTagValue('Environment') ) ) {
+				next;
 			}
-			else {
-				push @names, $fqdn;
+
+			my $profile = $elb->profileName;
+			my $route53 = getRoute53($profile);
+
+			my @names;
+			foreach my $ip ( $ELBv2->nslookup( $elb->dnsName ) ) {
+				my @tmp = $route53->ipToDnsNames($ip);
+				pdump @tmp;
+				push @names, @tmp;
+				push @ips,   $ip;
 			}
 		}
+
+		printf "%s %s\n",        $elb->profileName, $elb->dnsName;
+		printf "   ips:   %s\n", join( ' ', uniq(@ips) );
+		printf "   names: %s\n", join( ' ', uniq(@names) );
 	}
 
 	return @names;
@@ -150,20 +185,40 @@ sub getEIPHostnames {
 
 		next if !$address->networkInterfaceId;
 
+		my $profile   = $address->profileName;
 		my $interface = findNetworkInterface( $address->networkInterfaceId );
+		my $dnsName   = $interface->association->{dnsName};
+		my $ip        = $interface->association->{publicIp};
+		my $type      = $interface->interfaceType;
+
 		if ( $interface->interfaceType eq 'interface' ) {
-            push @names, $interface->association->{dnsName};
+
+			#			push @names, sprintf "$profile,%s,%s,%s", $type, $dnsName,$ip;
 		}
 		elsif ( $interface->interfaceType eq 'network_load_balancer' ) {
-			push @names, $interface->association->{dnsName};
+
+#            push @names, sprintf "$profile,%s,%s,%s", 'EIP',
+#			  $interface->association->{dnsName}, $EC2->nslookup($interface->association->{dnsName});
 		}
 		elsif ( $interface->interfaceType eq 'nat_gateway' ) {
-            push @names, $interface->association->{dnsName};
+
+#            push @names, sprintf "$profile,%s,%s,%s", 'EIP',
+#			  $interface->association->{dnsName}, $EC2->nslookup($interface->association->{dnsName});
 		}
 		else {
 			pdump $address;
 			die;
 		}
+
+		if ( !$type or !$dnsName or !$ip ) {
+			pdump $interface;
+			die;
+		}
+
+		push @{ $IpMap{$ip} }, $dnsName;
+
+		push @names, sprintf "$profile,%s,%s,%s", $type, $dnsName, $ip;
+
 	}
 
 	return @names;
@@ -172,11 +227,15 @@ sub getEIPHostnames {
 sub parseCmdLine {
 	my $help;
 	my $excludeProfiles;
+	my $ignoreTagsLike;
+	my $skipEnvironments;
 
 	GetOptions(
 		"e=s"    => \$excludeProfiles,
 		"E=s"    => \$ExcludeProfilesRe,
 		"I=s"    => \$IncludeProfilesRe,
+		"t=s"    => \$ignoreTagsLike,
+		"s=s"    => \$skipEnvironments,
 		"help|?" => \$help
 	);
 
@@ -188,6 +247,17 @@ sub parseCmdLine {
 	else {
 		@ExcludeProfiles = EXCLUDE_PROFILES_DEFAULT();
 	}
+
+	if ($ignoreTagsLike) {
+		foreach my $set ( split /,/, $ignoreTagsLike ) {
+			my ( $tag, $val ) = split /=/, $set;
+			$IgnoreTagsLike{$tag} = $val;
+		}
+	}
+
+	if ($skipEnvironments) {
+		@SkipEnvironments = split /,/, $skipEnvironments;
+	}
 }
 
 sub printUsage {
@@ -198,8 +268,10 @@ sub printUsage {
 $0    
     [-e <exclude profiles>]  
     [-E <exclude profiles regex>]
-    [-I <include profiles regex>]
-    
+    [-I <include profiles regex>]  key=val,key2=val2,...
+    [-s <skip envs>]
+    [-t <ignore tags like>]
+        
     [-?] (usage)
      
 HERE

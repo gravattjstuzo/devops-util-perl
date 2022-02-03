@@ -143,10 +143,17 @@ has profileName => (
 
 method getTagValue (Str $key!) {
     
-    return $self->SUPER::getTagValue(
-        tags => $self->tagSet,
-        key  => $key   
-    );  
+   # return $self->SUPER::getTagValue(
+   #     tags => $self->tagSet,
+   #     key  => $key   
+   # );  
+   
+     
+   foreach my $href (@{ $self->tagSet }) {
+        if ( $href->{key} and $href->{key} =~ /^$key$/ ) {
+            return $href->{value};
+        }
+    }
 }
 
 method getTag (Str $key!) {

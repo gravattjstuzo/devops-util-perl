@@ -35,13 +35,14 @@ my $openSearchAref = $EC2->awsX(
 	subcommand        => "elasticache describe-cache-clusters"
 );
 
-my $table = Text::Table->new("PROFILE", "TYPE" );
+my $table = Text::Table->new("PROFILE", "ID", "TYPE" );
 
 foreach my $href (@$openSearchAref) {
     my $profile = $href->{ProfileName};
     foreach my $instanceAref ( @{ $href->{CacheClusters} } ) {
+    	my $id = $instanceAref->{CacheClusterId};
         my $type = $instanceAref->{CacheNodeType};
-        $table->load( [ $profile, $type ] );
+        $table->load( [ $profile, $id, $type ] );
     }
 }
 

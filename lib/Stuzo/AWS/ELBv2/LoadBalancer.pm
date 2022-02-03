@@ -36,7 +36,11 @@ has profileName => (
     is => 'ro',
     isa => 'Str',
 );
-
+has tags => (
+    is      => 'rw',
+    isa     => 'ArrayRef',
+    default => sub { [] },
+);
 
 ##############################################################################
 # PRIVATE_ATTRIBUTES
@@ -59,6 +63,22 @@ method getPublicAddresses {
     # no addresses are in availabilityZones. use a dns-lookup instead
     # if you really need the addresses.
     #
+}
+
+method getTagValue (Str $key!) {
+    
+    return $self->SUPER::getTagValue(
+        tags => $self->tags,
+        key  => $key   
+    );  
+}
+
+method getTag (Str $key!) {
+
+    return $self->SUPER::getTag(
+        tags => $self->tags,
+        key  => $key
+    );
 }
 
 ##############################################################################

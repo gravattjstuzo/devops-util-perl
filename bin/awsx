@@ -12,6 +12,7 @@ Getopt::Long::Configure('pass_through');
 Getopt::Long::Configure('no_auto_abbrev');
 use Util::Medley::Simple::Spawn;
 use JSON;
+use Util::Medley::Logger;
 
 ###### CONSTANTS ######
 
@@ -33,7 +34,8 @@ use vars qw(
 
 ###### MAIN ######
 
-$Json = JSON->new;
+$Json   = JSON->new;
+$Logger = Util::Medley::Logger->new;
 
 parse_cmd_line();
 
@@ -42,100 +44,96 @@ my @in  = `$cmd`;
 die if $?;
 
 foreach my $profile (@in) {
-    chomp $profile;
+	chomp $profile;
 
-    if ($IncludeProfilesRe) {
-        if ($profile !~ /$IncludeProfilesRe/) {
-            next;
-        }
-    }
-   
-    if ($ExcludeProfilesRe) {
-        if ($profile =~ /$ExcludeProfilesRe/) {
-            next;
-        }
-    }
+	if ($IncludeProfilesRe) {
+		if ( $profile !~ /$IncludeProfilesRe/ ) {
+			next;
+		}
+	}
 
-    next if ignore_profile($profile);
-    next if $ExcludeProfiles{$profile};
+	next if ignore_profile($profile);
+	next if $ExcludeProfiles{$profile};
 
-    my $cmd = "aws --profile $profile @ARGV";
-    print STDERR "$cmd\n";
-    my ( $stdout, $stderr, $exit ) = Util::Medley::Simple::Spawn::capture($cmd);
-    if ($exit) {
-        print STDERR $stderr;
-        exit $exit;
-    }
+	my $cmd = "aws --profile $profile @ARGV";
+	my ( $stdout, $stderr, $exit ) = Util::Medley::Simple::Spawn::capture($cmd);
+	if ($exit) {
+		print STDERR $stderr;
+		exit $exit;
+	}
 
-    my $href = $Json->decode($stdout);
-    $href->{ProfileName} = $profile;
+	my $href = $Json->decode($stdout);
+	$href->{ProfileName} = $profile;
 
-    if ($MergeOutput) {
-        push @MergedOutput, $href;
-    }
-    else {
-        print $Json->pretty->encode($href);
-    }
+	if ($MergeOutput) {
+		push @MergedOutput, $href;
+	}
+	else {
+		print $Json->pretty->encode($href);
+	}
 }
 
 if ($MergeOutput) {
-    print $Json->pretty->encode( \@MergedOutput );
+	print $Json->pretty->encode( \@MergedOutput );
 }
 
 ###### END MAIN ######
 
 sub ignore_profile {
-    my $profile = shift;
+	my $profile = shift;
 
-    foreach my $ignore ( IGNORE_PROFILES() ) {
-        if ( $profile eq $ignore ) {
-            return 1;
-        }
-    }
+	foreach my $ignore ( IGNORE_PROFILES() ) {
+		if ( $profile eq $ignore ) {
+			return 1;
+		}
+	}
 
-    foreach my $ignore_re ( IGNORE_PROFILES_RE() ) {
-        if ( $profile =~ $ignore_re ) {
-            return 1;
-        }
-    }
+	my @regexes = ( IGNORE_PROFILES_RE() );
+	push @regexes, split /,/, $ExcludeProfilesRe if $ExcludeProfilesRe;
 
-    return 0;
+	foreach my $ignore_re (@regexes) {
+		if ( $profile =~ $ignore_re ) {
+			return 1;
+		}
+	}
+
+	return 0;
 }
 
 sub check_required {
-    my $opt = shift;
-    my $arg = shift;
+	my $opt = shift;
+	my $arg = shift;
 
-    print_usage("missing arg $opt") if !$arg;
+	print_usage("missing arg $opt") if !$arg;
 }
 
 sub parse_cmd_line {
-    my $help;
-    my $excludeProfiles;
+	my $help;
+	my $excludeProfiles;
 
-    GetOptions(
-        "e=s"          => \$excludeProfiles,
-        "E=s" => \$ExcludeProfilesRe,
-        "I=s" => \$IncludeProfilesRe,
-        "merge-output" => \$MergeOutput,
-        "help|?"       => \$help
-    );
+	GetOptions(
+		"e=s"          => \$excludeProfiles,
+		"E=s"          => \$ExcludeProfilesRe,
+		"I=s"          => \$IncludeProfilesRe,
+		"merge-output" => \$MergeOutput,
+		"help|?"       => \$help
+	);
 
-    print_usage("usage:") if $help;
+	print_usage("usage:") if $help;
 
-    if ($excludeProfiles) {
-        foreach my $profile ( split /,/, $excludeProfiles ) {
-            $ExcludeProfiles{$profile} = 1;
-        }
-    }
+	if ($excludeProfiles) {
+		foreach my $profile ( split /,/, $excludeProfiles ) {
+			$ExcludeProfiles{$profile} = 1;
+		}
+	}
 
-    #    check_required( '-e', $Example );
+	#    check_required( '-e', $Example );
 }
 
 sub print_usage {
-    print STDERR "@_\n";
+	print STDERR "@_\n";
 
-    print <<"HERE";
+	print <<"HERE";
 
 $0    
     [-e <exclude profiles>]
@@ -147,5 +145,5 @@ $0
      
 HERE
 
-    exit 1;
+	exit 1;
 }

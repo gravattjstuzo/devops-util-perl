@@ -42,6 +42,21 @@ has profileName => (
 # PUBLIC METHODS
 ##############################################################################
 
+method isPublic {
+
+    if ($self->isPrivate) {
+        return 0;	
+    }	
+    
+    return 1;
+}
+
+method isPrivate {
+
+    my $bool = $self->config->{privateZone};
+    
+    return $bool;	
+}
 
 ##############################################################################
 # PRIVATE_METHODS

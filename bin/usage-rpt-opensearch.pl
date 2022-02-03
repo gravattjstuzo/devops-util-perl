@@ -13,7 +13,6 @@ use Text::Table;
 
 ###### CONSTANTS ######
 
-
 ###### GLOBALS ######
 
 use vars qw(
@@ -36,22 +35,28 @@ my $openSearchAref = $EC2->awsX(
 	subcommand        => "opensearch list-domain-names",
 );
 
-my $table = Text::Table->new("PROFILE", "DOMAIN", "TYPE", "COUNT");
+my $table = Text::Table->new( "PROFILE", "DOMAIN", "NODE", "TYPE", "COUNT" );
 
 foreach my $href (@$openSearchAref) {
 	my $profile         = $href->{ProfileName};
 	my $domainNamesAref = $href->{DomainNames};
-	
+
 	foreach my $domainHref (@$domainNamesAref) {
 		my $domainName = $domainHref->{DomainName};
 		my $respHref   = $EC2->aws(
 			profile    => $profile,
 			subcommand => "opensearch describe-domain --domain-name $domainName"
 		);
+
 		my $configHref = $respHref->{DomainStatus}->{ClusterConfig};
-		my $type       = $configHref->{InstanceType};
-		my $count      = $configHref->{InstanceCount};
-		$table->load([$profile, $domainName, $type, $count]);
+
+		my $type  = $configHref->{DedicatedMasterType};
+		my $count = $configHref->{DedicatedMasterCount};
+		$table->load( [ $profile, $domainName, 'master', $type, $count ] );
+
+		$type  = $configHref->{InstanceType};
+		$count = $configHref->{InstanceCount};
+		$table->load( [ $profile, $domainName, 'data', $type, $count ] );
 	}
 }
 

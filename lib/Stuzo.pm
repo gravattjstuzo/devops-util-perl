@@ -7,6 +7,7 @@ use Kavorka 'method';
 use Data::Printer alias => 'pdump';
 use JSON;
 use Devel::Confess;
+use Net::DNS;
 
 with
   'Util::Medley::Roles::Attributes::Logger',
@@ -33,24 +34,18 @@ with
 # PUBLIC METHODS
 ##############################################################################
 
-method getTag (ArrayRef :$tags!,
-               Str      :$key!) {
+method nslookup (Str $name!) {
 
-	foreach my $href (@$tags) {
-		if ( $href->{Key} and $href->{Key} =~ /^$key$/ ) {
-			return $href;
-		}
+	$name =~ s/\.$//;    # remove trailing dots
+	$self->Logger->verbose("nslookup '$name'");
+
+	my @ips;
+	foreach my $res ( rr($name) ) {
+
+		push @ips, $res->address;
 	}
-}
-
-method getTagValue (ArrayRef :$tags!,
-		  		    Str      :$key!) {
-
-	foreach my $href (@$tags) {
-		if ( $href->{Key} and $href->{Key} =~ /^$key$/ ) {
-			return $href->{Value};
-		}
-	}
+	
+	return @ips;
 }
 
 ##############################################################################
@@ -88,10 +83,13 @@ method __camelize (Any $data!) {
 			if ( $type eq 'ARRAY' or $type eq 'HASH' ) {
 				$new->{$camelizedKey} = $self->__camelize($scalar);
 			}
-			elsif ( $type eq '' ) {
+			elsif ( $type eq '' or $type eq 'JSON::PP::Boolean' ) {
 				$new->{$camelizedKey} = $scalar;
 			}
 			else {
+				pdump $type;
+				die;
+
 				#				$self->Logger->verbose("...skipping scalar type: $type");
 			}
 		}
@@ -101,8 +99,8 @@ method __camelize (Any $data!) {
 			if ( $data =~ /DNSName/i ) {
 				$new = 'dnsName';    # want dnsName not dNSName
 			}
-			elsif ($data =~ /TTL/i) {
-			     $new = 'ttl';	
+			elsif ( $data =~ /TTL/i ) {
+				$new = 'ttl';
 			}
 			else {
 				$new = $self->String->camelize($data);

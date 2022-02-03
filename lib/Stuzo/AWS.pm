@@ -116,6 +116,37 @@ method listProfiles (ArrayRef|Undef :$excludeProfiles,
 	return \@profiles;
 }
 
+method getTag (ArrayRef :$tags!,
+               Str      :$key!) {
+
+    foreach my $href (@$tags) {
+        if ( $href->{Key} and $href->{Key} =~ /^$key$/ ) {
+            return $href;
+        }
+    }
+}
+
+method getTagValue (ArrayRef :$tags!,
+                    Str      :$key!) {
+
+    foreach my $href (@$tags) {
+        if ( $href->{Key} and $href->{Key} =~ /^$key$/ ) {
+            return $href->{Value};
+        }
+    }
+} 
+
+method getProfileName {
+    
+    if ($self->profile) {
+        return $self->profile;	
+    }	
+    
+    if ($ENV{AWS_PROFILE}) {
+        return $ENV{AWS_PROFILE};	
+    }
+}
+
 ##############################################################################
 # PRIVATE METHODS
 ##############################################################################

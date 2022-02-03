@@ -37,14 +37,15 @@ my $openSearchAref = $EC2->awsX(
 	subcommand        => "rds describe-db-instances",
 );
 
-my $table = Text::Table->new( "PROFILE", "TYPE");
+my $table = Text::Table->new( "PROFILE", "ID", "TYPE" );
 
 foreach my $href (@$openSearchAref) {
-    my $profile = $href->{ProfileName};
-    foreach my $instanceAref (@{ $href->{DBInstances} }) {
-        my $type = $instanceAref->{   DBInstanceClass};
-        $table->load([$profile, $type]);
-    }
+	my $profile = $href->{ProfileName};
+	foreach my $instanceAref ( @{ $href->{DBInstances} } ) {
+		my $id = $instanceAref->{DBInstanceIdentifier};
+		my $type = $instanceAref->{DBInstanceClass};
+		$table->load( [ $profile, $id, $type ] );
+	}
 }
 
 print $table;

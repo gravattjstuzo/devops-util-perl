@@ -12,6 +12,7 @@ use Stuzo::AWS::EC2::NetworkInterface;
 extends 'Stuzo::AWS';
 
 with
+  'Util::Medley::Roles::Attributes::List',
   'Util::Medley::Roles::Attributes::Logger',
   'Util::Medley::Roles::Attributes::Spawn',
   'Util::Medley::Roles::Attributes::String';
@@ -24,9 +25,19 @@ with
 # PUBLIC ATTRIBUTES
 ##############################################################################
 
+has profile => (
+	is  => 'rw',
+	isa => 'Str',
+);
+
 ##############################################################################
 # PRIVATE_ATTRIBUTES
 ##############################################################################
+
+has _addresses => (
+	is  => 'rw',
+	isa => 'ArrayRef',
+);
 
 ##############################################################################
 # CONSTRUCTOR
@@ -91,7 +102,7 @@ method describeNetworkInterfaces (ArrayRef[Str] :$networkInterfaceIds,
 
 	my @interfaces;
 	foreach my $interface (@$aref) {
-		my $interfaceHref = $self->__camelize( $interface );
+		my $interfaceHref = $self->__camelize($interface);
 		my $networkInterface =
 		  Stuzo::AWS::EC2::NetworkInterface->new(%$interfaceHref);
 		push @interfaces, $networkInterface;
@@ -107,6 +118,7 @@ method describeNetworkInterfaces (ArrayRef[Str] :$networkInterfaceIds,
 =cut
 
 method awsXDescribeAddresses (Regexp    	 :$matchTagName,
+                              HashRef        :$ignoreTagsLike,
 							  ArrayRef|Undef :$excludeProfiles,
 							  Str|Undef      :$excludeProfilesRe,
 							  Str|Undef      :$includeProfilesRe,
@@ -175,6 +187,17 @@ method awsXDescribeAddresses (Regexp    	 :$matchTagName,
 			}
 		}
 
+		if ($ignoreTagsLike) {
+			foreach my $tagKey ( keys %$ignoreTagsLike ) {
+				my $regex    = $ignoreTagsLike->{$tagKey};
+				my $tagValue = $address->getTagValue($tagKey);
+				if ( $tagValue =~ /$regex/ ) {
+					$self->Logger->verbose("skipping tag $tagKey:$tagValue");
+					next;
+				}
+			}
+		}
+
 		# if we get here we have passed all conditions
 		push @final, $address;
 	}
@@ -200,7 +223,7 @@ method awsXDescribeNetworkInterfaces (ArrayRef|Undef :$excludeProfiles,
 
 		foreach my $interfaceHref ( @{ $href->{NetworkInterfaces} } ) {
 
-			my $camelizedHref = $self->__camelize( $interfaceHref );
+			my $camelizedHref = $self->__camelize($interfaceHref);
 
 			my $interface = Stuzo::AWS::EC2::NetworkInterface->new(
 				profileName => $profileName,
@@ -212,6 +235,191 @@ method awsXDescribeNetworkInterfaces (ArrayRef|Undef :$excludeProfiles,
 	}
 
 	return \@interfaces;
+}
+
+method describeAddresses (ArrayRef :$allocationIds) {
+
+	if ( !$self->_addresses ) {
+		my $href = $self->aws( subcommand => 'ec2 describe-addresses', );
+
+		my @resp;
+		foreach my $address ( @{ $href->{Addresses} } ) {
+			push @resp, $address;
+		}
+
+		$self->_addresses( \@resp );
+	}
+
+=pod example response
+
+    [
+        {
+            "PublicIp": "18.213.20.77",
+            "AllocationId": "eipalloc-093acfe272721a222",
+            "AssociationId": "eipassoc-088a11a4590b97fbd",
+            "Domain": "vpc",
+            "NetworkInterfaceId": "eni-01167db3eb635d3bb",
+            "NetworkInterfaceOwnerId": "729361165913",
+            "PrivateIpAddress": "10.115.12.208",
+            "Tags": [
+                {
+                    "Key": "Stage",
+                    "Value": "circlek"
+                },
+                {
+                    "Key": "EipID",
+                    "Value": "nlb-eip-1"
+                },
+                ...
+            ],
+            "PublicIpv4Pool": "amazon",
+            "NetworkBorderGroup": "us-east-1"
+        },
+        ....
+    ]
+
+=cut
+
+	if ($allocationIds) {
+
+		my @resp;
+		foreach my $href ( @{ $self->_addresses } ) {
+			if ( $href->{AllocationId} ) {
+				if (
+					$self->List->contains(
+						$allocationIds, $href->{AllocationId}
+					)
+				  )
+				{
+					push @resp, $href;
+				}
+			}
+		}
+
+		return \@resp;
+	}
+
+	return $self->_addresses;
+}
+
+method describeInstances (HashRef :$tags) {
+
+	my %param;
+	$param{subcommand} = 'ec2 describe-instances';
+	$param{profile}    = $self->profile if $self->profile;
+
+	my $href = $self->aws(%param);
+	my @instances;
+	foreach my $resHref ( @{ $href->{Reservations} } ) {
+		push @instances, @{ $resHref->{Instances} };
+	}
+
+	if ( $tags and keys(%$tags) ) {
+		my @resp;
+		foreach my $instance (@instances) {
+			foreach my $key ( keys %$tags ) {
+				my $wantVal = $tags->{$key};
+				my $val =
+				  $self->getTagValue( tags => $instance->{Tags}, key => $key );
+				if ( $val and $val eq $wantVal ) {
+					push @resp, $instance;
+					last;
+				}
+			}
+		}
+		
+		return \@resp;
+	}
+
+	return \@instances;
+}
+
+method describeNatGateways (Str :$type) {
+
+	my %param;
+	$param{subcommand} = 'ec2 describe-nat-gateways';
+	$param{profile}    = $self->profile if $self->profile;
+
+	my $href = $self->aws(%param);
+
+	# my $aref = $href->{NatGateways};
+
+	my @resp;
+	foreach my $gwHref ( @{ $href->{NatGateways} } ) {
+
+		next if $type and $gwHref->{ConnectivityType} ne $type;
+
+		push @resp, $gwHref;
+	}
+
+=pod
+
+    [
+        {
+            "CreateTime": "2020-11-17T17:26:55+00:00",
+            "NatGatewayAddresses": [
+                {
+                    "AllocationId": "eipalloc-0c5b54a9320f92608",
+                    "NetworkInterfaceId": "eni-019bf4ae907015d77",
+                    "PrivateIp": "10.9.10.177",
+                    "PublicIp": "18.235.252.150"
+                }
+            ],
+            "NatGatewayId": "nat-031020b30afcfbe5f",
+            "State": "available",
+            "SubnetId": "subnet-081bdbcc6f3a5e8e0",
+            "VpcId": "vpc-0c59e577c9f066eb7",
+            "Tags": [
+                {
+                    "Key": "ManagedByTerraform",
+                    "Value": "true"
+                },
+                {
+                    "Key": "Customer",
+                    "Value": "cefco"
+                },
+                ....
+            ],
+            "ConnectivityType": "public"
+        },
+        ...
+    ] 
+=cut
+
+	return \@resp;
+}
+
+method findNetworkInterfaceByAllocId (Str :$allocationId!) {
+
+	foreach my $address ( @{ $self->describeAddresses } ) {
+		if ( $address->{AllocationId} ) {
+			if ( $address->{AllocationId} eq $allocationId ) {
+				return $address->{NetworkInterfaceId};
+			}
+		}
+	}
+}
+
+method findAddressByNetworkInterfaceId (Str :$networkInterfaceId!) {
+
+	foreach my $addressHref ( @{ $self->describeAddresses } ) {
+		if ( $addressHref->{NetworkInterfaceId} ) {
+			if ( $addressHref->{NetworkInterfaceId} eq $networkInterfaceId ) {
+				return $addressHref;
+			}
+		}
+	}
+}
+
+method findAddressByPublicIp (Str :$ip!) {
+
+    foreach my $addressHref ( @{ $self->describeAddresses } ) {
+        if ( $addressHref->{PublicIp} ) {
+        	if ($addressHref->{PublicIp} eq $ip) {
+                return $addressHref;
+            }
+        }
+    }
 }
 
 ##############################################################################

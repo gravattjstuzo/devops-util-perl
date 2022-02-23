@@ -14,6 +14,7 @@ use Util::Medley::Simple::List ('uniq');
 extends 'Stuzo::AWS';
 
 with
+  'Util::Medley::Roles::Attributes::Cache',
   'Util::Medley::Roles::Attributes::Logger',
   'Util::Medley::Roles::Attributes::Spawn',
   'Util::Medley::Roles::Attributes::String';
@@ -21,6 +22,8 @@ with
 ##############################################################################
 # CONSTANTS
 ##############################################################################
+
+use constant CACHE_NS_HOSTED_ZONES => 'stuzo-aws-route53';
 
 ##############################################################################
 # PUBLIC ATTRIBUTES
@@ -36,8 +39,9 @@ has profile => (
 ##############################################################################
 
 has _hostedZones => (
-	is  => 'rw',
-	isa => 'ArrayRef[Stuzo::AWS::Route53::HostedZone]',
+	is        => 'rw',
+	isa       => 'HashRef',
+	predicate => '_hasHostedZones',
 );
 
 has _resourceRecordSets => (
@@ -50,17 +54,25 @@ has _resourceRecordSets => (
 # CONSTRUCTOR
 ##############################################################################
 
+method BUILD {
+
+}
+
 ##############################################################################
 # PUBLIC METHODS
 ##############################################################################
 
 method listHostedZones (Bool :$privateZone) {
 
-	my %param;
-	$param{subcommand} = 'route53 list-hosted-zones';
-	$param{profile}    = $self->profile if $self->profile;
+	if ( !$self->_hasHostedZones ) {
+		my %param;
+		$param{subcommand} = 'route53 list-hosted-zones';
+		$param{profile}    = $self->profile if $self->profile;
+		my $href = $self->aws(%param);
+		$self->_hostedZones($href);
+	}
 
-	my $href = $self->aws(%param);
+	my $href = $self->_hostedZones;
 
 	my @resp;
 	foreach my $zoneHref ( @{ $href->{HostedZones} } ) {
@@ -131,7 +143,6 @@ method listResourceRecordSets (Str :$hostedZoneId) {
 		my %param;
 		$param{subcommand} = "@cmd";
 		$param{profile}    = $self->profile if $self->profile;
-
 		my $href = $self->aws(%param);
 
 		$cache->{$hostedZoneId} = $href->{ResourceRecordSets};
@@ -181,11 +192,11 @@ method findRecordsByAliasTarget (Str  :$dnsName!,
                                  Str  :$hostedZoneId,
                                  Bool :$privateZone) {
 
-    my @records;
-  
-    my %params;
-    $params{privateZone} = $privateZone if defined $privateZone; 
-    
+	my @records;
+
+	my %params;
+	$params{privateZone} = $privateZone if defined $privateZone;
+
 	my $zones = $self->listHostedZones(%params);
 	foreach my $zone (@$zones) {
 
@@ -205,7 +216,7 @@ method findRecordsByAliasTarget (Str  :$dnsName!,
 				next
 				  if $hostedZoneId and $hostedZoneId ne $target->{HostedZoneId};
 
-                push @records, $rec;
+				push @records, $rec;
 			}
 		}
 	}
@@ -227,7 +238,7 @@ method findRecordsByAliasTarget (Str  :$dnsName!,
 
 =cut
 
-    return \@records;
+	return \@records;
 }
 
 =pod
@@ -493,26 +504,24 @@ method reverseSearchDnsAliases (Str :$dnsName!) {
 
 method stripTrailingDot (Str $str!) {
 
-    $str =~ s/\.$//;
+	$str =~ s/\.$//;
 
-    return $str;
+	return $str;
 }
 
 method stripTrailingDots (ArrayRef $list!) {
 
-    my @new;
-    foreach my $str (@$list) {
-        push @new, $self->stripTrailingDot($str);	
-    }	
-    
-    return \@new;
+	my @new;
+	foreach my $str (@$list) {
+		push @new, $self->stripTrailingDot($str);
+	}
+
+	return \@new;
 }
 
 ##############################################################################
 # PRIVATE METHODS
 ##############################################################################
-
-
 
 __PACKAGE__->meta->make_immutable;
 

@@ -23,7 +23,6 @@ use constant EXTRACTS => qw(
   marketing_contents
   membership_point_transactions
   memberships
-  memberships_offers
   offer_fulfillments
   offers
   redemptions
